@@ -7,10 +7,7 @@ from functools import partial
 from multiprocessing import Process, Queue
 from time import sleep
 
-import requests
-from openai import OpenAI
-from tqdm import tqdm
-from slime.rollout.rm_hub import get_deepscaler_rule_based_reward
+from .tool_decoupling_metric import analyze_tool_decoupling
 
 TASK_TYPE = "math"
 
@@ -29,6 +26,8 @@ def get_rule_based_math_reward(item):
     response = messages[-1]["content"]
     if response is None or len(response) == 0:
         return 0
+
+    from slime.rollout.rm_hub import get_deepscaler_rule_based_reward
 
     reward = get_deepscaler_rule_based_reward(response, label)
     return reward
@@ -126,6 +125,10 @@ def worker_process(task_queue, done_queue, rollout_func, reward_func, client, sa
         item["timestamp"] = str(time.time())
         item["round_number"] = len([_ for _ in item["messages"] if _["role"] == "assistant"])
         item["finish_reason"] = finish_reason
+        # Decoupling diagnostics (IH-GRPO): how delayed is tool execution in
+        # this trajectory? Travels into the buffer via extra_info for reward
+        # shaping / filtering downstream.
+        item["tool_decoupling"] = analyze_tool_decoupling(messages)
 
         output_item = {
             "uid": item.pop("uid"),
@@ -168,6 +171,8 @@ class BaseGenerator:
             print(f"BaseGenerator initialized with {len(self.skip_instance_ids)} instance_ids to skip")
             self.skip_instance_ids = self.skip_instance_ids * self.num_repeat_per_sample
 
+        from openai import OpenAI
+
         if "/v1" in remote_engine_url:
             self.client = OpenAI(api_key="test", base_url=remote_engine_url)
         else:
@@ -175,6 +180,8 @@ class BaseGenerator:
             self.client = OpenAI(api_key="test", base_url=remote_engine_url)
 
     def send_data_to_buffer(self, data):
+        import requests
+
         remote_buffer_url = self.remote_buffer_url.rstrip("/") + "/buffer/write"
 
         for _ in range(2):
@@ -247,6 +254,8 @@ class BaseGenerator:
 
         process = Process(target=read_data_into_queue)
         process.start()
+
+        from tqdm import tqdm
 
         progress_bar = tqdm()
         num_finished = 0

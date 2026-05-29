@@ -135,3 +135,24 @@ pre-commit run --all-files --show-diff-on-failure --color=always
   urldate      = {2025-06-19}
 }
 ```
+
+## Tool Invocation/Execution Decoupling — adapted from [Implicit Hierarchical GRPO: Decoupling Tool Invocation from Execution for Tool-Integrated Mathematical Reasoning](https://arxiv.org/abs/2605.18500v1)
+
+IH-GRPO observes that coupling a tool *invocation* to its *immediate*
+execution interrupts a model's reasoning stream and degrades
+tool-integrated reasoning (TIR); it prefers *delayed execution* where the
+policy may invoke tools and keep reasoning before execution.
+
+We do not ship the paper's IH-GRPO surrogate loss (that lives in the
+trainer). Instead, `slime_plugins/rollout_buffer/generator/tool_decoupling_metric.py`
+derives a per-trajectory **decoupling diagnostic** purely from rollout
+output: it flattens chat `messages` into an ordered invoke/exec/reason
+event stream (supporting both OpenAI `tool_calls`/`role:"tool"` and inline
+`<tool_call>`/`<tool_response>` tags) and reports a `decoupling_score` in
+`[0, 1]` — the fraction of invocations whose execution is *delayed* rather
+than immediately coupled. `base_generator.worker_process` stamps this block
+onto every rollout item's `extra_info`, so the signal travels into the
+buffer for downstream reward shaping (`decoupling_bonus`), filtering, or
+analysis. The IH-GRPO training objective itself is left out.
+
+Contributed via [Remyx Recommendation](https://engine.remyx.ai).
