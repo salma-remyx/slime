@@ -834,6 +834,25 @@ def get_slime_extra_args_provider(add_custom_arguments=None):
                 default=None,
                 help="lower bound of the value for Dual-clip PPO from https://arxiv.org/pdf/1912.09729",
             )
+            parser.add_argument(
+                "--nsr-rescue-prob",
+                type=float,
+                default=0.0,
+                help=(
+                    "Near-boundary Stochastic Rescue probability (arXiv:2605.22703). When > 0, "
+                    "tokens just past the clip edge stochastically retain their unclipped "
+                    "gradient signal with this probability. 0 disables NSR (plain hard clipping)."
+                ),
+            )
+            parser.add_argument(
+                "--nsr-boundary-margin",
+                type=float,
+                default=0.0,
+                help=(
+                    "Relative width of the near-boundary band beyond the clip edge eligible for "
+                    "NSR rescue (e.g. 0.1 = within 10%% past the edge). Must be > 0 to enable NSR."
+                ),
+            )
             parser.add_argument("--value-clip", type=float, default=0.2, help="the clip for value loss")
             parser.add_argument(
                 "--kl-coef",
