@@ -128,12 +128,29 @@ def compute_policy_loss(
     eps_clip: float,
     eps_clip_high: float,
     eps_clip_c: float | None = None,
+    nsr_rescue_prob: float = 0.0,
+    nsr_boundary_margin: float = 0.0,
 ):
     ratio = (-ppo_kl).exp()
     pg_losses1 = -ratio * advantages
     pg_losses2 = -ratio.clamp(1 - eps_clip, 1 + eps_clip_high) * advantages
     clip_pg_losses1 = torch.maximum(pg_losses1, pg_losses2)
     clipfrac = torch.gt(pg_losses2, pg_losses1).float()
+
+    # Near-boundary Stochastic Rescue (NSR): recover gradient-bearing signal
+    # for tokens just past the clip edge instead of hard-discarding them.
+    if nsr_rescue_prob > 0.0 and nsr_boundary_margin > 0.0:
+        from slime.utils.clip_signal_rescue import near_boundary_stochastic_rescue
+
+        clip_pg_losses1 = near_boundary_stochastic_rescue(
+            ratio=ratio,
+            pg_losses_unclipped=pg_losses1,
+            pg_losses_clipped=clip_pg_losses1,
+            eps_clip=eps_clip,
+            eps_clip_high=eps_clip_high,
+            rescue_prob=nsr_rescue_prob,
+            boundary_margin=nsr_boundary_margin,
+        )
 
     if eps_clip_c is not None:
         assert (
