@@ -135,3 +135,19 @@ pre-commit run --all-files --show-diff-on-failure --color=always
   urldate      = {2025-06-19}
 }
 ```
+
+## Robust Advantage Gating — adapted from [Skill-Conditioned Gated Self-Distillation for LLM Reasoning](https://arxiv.org/abs/2605.28791v1)
+
+SGSD turns sparse verifier outcomes into dense supervision by validating
+skill-conditioned teacher hypotheses, then applies a *robust gated objective*
+that "distills informative teacher-student disagreements while suppressing
+uncertain or extreme signals." We bring that gating insight to slime's GRPO
+group-advantage stage: after per-group standardization in
+`slime_plugins/rollout_buffer/generator/base_generator.py`, the new
+`gated_advantage` module suppresses near-mean (uncertain) advantages via a
+deadband and decays outlier (extreme) advantages back toward the informative
+band, improving rollout-to-training stability. The full multi-teacher,
+token-level distillation procedure (which needs a trainer) is intentionally out
+of scope; this is pure reward shaping over generated trajectories.
+
+Contributed via [Remyx Recommendation](https://engine.remyx.ai).

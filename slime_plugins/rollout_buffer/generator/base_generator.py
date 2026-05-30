@@ -12,6 +12,21 @@ from openai import OpenAI
 from tqdm import tqdm
 from slime.rollout.rm_hub import get_deepscaler_rule_based_reward
 
+try:
+    # Normal package import (e.g. tests, `python -m`).
+    from .gated_advantage import gate_group_advantages
+except ImportError:
+    # The buffer loads this file standalone via spec_from_file_location, so there
+    # is no parent package; load the sibling module directly by path.
+    import importlib.util as _ilu
+    import os as _os
+
+    _ga_path = _os.path.join(_os.path.dirname(__file__), "gated_advantage.py")
+    _ga_spec = _ilu.spec_from_file_location("gated_advantage", _ga_path)
+    _ga_mod = _ilu.module_from_spec(_ga_spec)
+    _ga_spec.loader.exec_module(_ga_mod)
+    gate_group_advantages = _ga_mod.gate_group_advantages
+
 TASK_TYPE = "math"
 
 SAMPLING_PARAMS = {
@@ -320,11 +335,28 @@ def normalize_group_data(group, epsilon=1e-8, algo="grpo"):
         else:
             normalized_rewards = [(r - mean_reward) / (std_reward + epsilon) if 1 >= r >= 0 else r for r in rewards]
 
+    # SGSD-style robust gating: suppress uncertain (near-mean) and extreme
+    # (outlier) advantage signals while keeping the informative middle band.
+    # Only standardized (in-range) rewards are gated; out-of-range penalties
+    # are left untouched. See gated_advantage.py for the paper attribution.
+    valid_mask = [1 >= r >= 0 for r in rewards]
+    normalized_rewards = gate_group_advantages(normalized_rewards, valid_mask=valid_mask)
+
     for i, item in enumerate(data):
         item["reward"] = normalized_rewards[i]
         item["raw_reward"] = rewards[i]
 
     return (instance_id, data)
+
+
+def transform_group(group, task_type="math"):
+    """Buffer post-processing hook: GRPO group-normalize then robustly gate.
+
+    Discovered by the rollout buffer via ``getattr(module, "transform_group")``
+    and applied to each valid group before it is handed to training, so the
+    gated advantages above are part of the live rollout path.
+    """
+    return normalize_group_data(group)
 
 
 def is_valid_group(group, min_valid_group_size, task_type="math"):
