@@ -7,6 +7,8 @@ import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 
+from slime.utils.near_boundary_rescue import near_boundary_rescue
+
 
 @torch.compile(dynamic=True)
 def compute_approx_kl(
@@ -128,12 +130,29 @@ def compute_policy_loss(
     eps_clip: float,
     eps_clip_high: float,
     eps_clip_c: float | None = None,
+    nsr_band: float = 0.0,
+    nsr_prob: float = 0.0,
 ):
     ratio = (-ppo_kl).exp()
     pg_losses1 = -ratio * advantages
     pg_losses2 = -ratio.clamp(1 - eps_clip, 1 + eps_clip_high) * advantages
     clip_pg_losses1 = torch.maximum(pg_losses1, pg_losses2)
     clipfrac = torch.gt(pg_losses2, pg_losses1).float()
+
+    # Near-boundary Stochastic Rescue (NSR): stochastically restore the
+    # un-clamped signal for tokens sitting just past the clip boundary, recovering
+    # gradient that hard clipping would otherwise discard (arxiv 2605.22703).
+    if nsr_band > 0.0 and nsr_prob > 0.0:
+        clip_pg_losses1, _ = near_boundary_rescue(
+            ratio=ratio,
+            pg_losses_unclipped=pg_losses1,
+            pg_losses_clipped=clip_pg_losses1,
+            clipfrac=clipfrac,
+            eps_clip=eps_clip,
+            eps_clip_high=eps_clip_high,
+            nsr_band=nsr_band,
+            nsr_prob=nsr_prob,
+        )
 
     if eps_clip_c is not None:
         assert (

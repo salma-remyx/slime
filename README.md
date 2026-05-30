@@ -135,3 +135,26 @@ pre-commit run --all-files --show-diff-on-failure --color=always
   urldate      = {2025-06-19}
 }
 ```
+
+## Near-boundary Stochastic Rescue (NSR) — adapted from "Clipping Bottleneck: Stabilizing RLVR via Stochastic Recovery of Near-Boundary Signals"
+
+Hard clipping in GRPO/PPO-style objectives zeroes the policy gradient for every
+token whose importance ratio leaves the trust region `[1 - eps_clip, 1 + eps_clip_high]`.
+The paper observes that informative signals often sit *just past* that boundary
+and are needlessly discarded. NSR is a minimal, plug-and-play fix: tokens in a
+thin band immediately beyond the clip threshold are *stochastically* kept (with a
+probability that decays linearly with distance from the boundary), restoring
+their un-clamped gradient.
+
+It is implemented in `slime/utils/near_boundary_rescue.py` and wired into the
+existing policy-loss call site (`slime.utils.ppo_utils.compute_policy_loss`).
+Enable it with:
+
+```bash
+--nsr-band 0.1 --nsr-prob 0.5
+```
+
+Both flags default to `0` (NSR disabled), leaving the baseline clipped objective
+unchanged.
+
+Contributed via [Remyx Recommendation](https://engine.remyx.ai).

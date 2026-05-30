@@ -892,7 +892,14 @@ def policy_loss_function(
         log_probs = torch.cat(log_probs, dim=0)
         ppo_kl = old_log_probs - log_probs
 
-    pg_loss, pg_clipfrac = compute_policy_loss(ppo_kl, advantages, args.eps_clip, args.eps_clip_high)
+    pg_loss, pg_clipfrac = compute_policy_loss(
+        ppo_kl,
+        advantages,
+        args.eps_clip,
+        args.eps_clip_high,
+        nsr_band=args.nsr_band,
+        nsr_prob=args.nsr_prob,
+    )
 
     if args.use_opsm:
         pg_loss = pg_loss * opsm_mask

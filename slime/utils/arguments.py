@@ -834,6 +834,21 @@ def get_slime_extra_args_provider(add_custom_arguments=None):
                 default=None,
                 help="lower bound of the value for Dual-clip PPO from https://arxiv.org/pdf/1912.09729",
             )
+            parser.add_argument(
+                "--nsr-band",
+                type=float,
+                default=0.0,
+                help="Near-boundary Stochastic Rescue (NSR) band width (ratio units). Tokens whose "
+                "importance ratio overshoots the clip boundary by at most this much are eligible for "
+                "stochastic rescue. 0 disables NSR. From https://arxiv.org/abs/2605.22703",
+            )
+            parser.add_argument(
+                "--nsr-prob",
+                type=float,
+                default=0.0,
+                help="Maximum NSR rescue probability at the clip boundary, decaying linearly to 0 at the "
+                "far edge of --nsr-band. 0 disables NSR.",
+            )
             parser.add_argument("--value-clip", type=float, default=0.2, help="the clip for value loss")
             parser.add_argument(
                 "--kl-coef",
@@ -1771,6 +1786,10 @@ def slime_validate_args(args):
 
     if args.eps_clip_high is None:
         args.eps_clip_high = args.eps_clip
+
+    assert args.nsr_band >= 0.0 and args.nsr_prob >= 0.0, "nsr_band and nsr_prob must be non-negative"
+    if (args.nsr_band > 0.0) != (args.nsr_prob > 0.0):
+        raise ValueError("NSR requires both --nsr-band and --nsr-prob to be positive (or both 0 to disable).")
 
     if args.eval_reward_key is None:
         args.eval_reward_key = args.reward_key
